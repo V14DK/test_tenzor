@@ -3,18 +3,22 @@ import psycopg2
 
 
 class Db:
-    def __init__(self, user, password, dbname, host='localhost', port='5432'):
-        self.__conn = psycopg2.connect(user=user,
-                                       password=password,
-                                       dbname=dbname,
-                                       host=host,
-                                       port=port)
-        self.__cursor = self.__conn.cursor()
-        if self.__conn:
-            self.connection = True
-        else:
-            self.connection = False
-        print('Соединение открыто')
+    def __init__(self, user, password, dbname, path, host='localhost', port='5432'):
+        try:
+            self.__conn = psycopg2.connect(user=user,
+                                           password=password,
+                                           dbname=dbname,
+                                           host=host,
+                                           port=port)
+            self.__cursor = self.__conn.cursor()
+            if self.__conn:
+                self.connection = True
+            else:
+                self.connection = False
+            print('Соединение открыто')
+            self.start_settings(path)
+        except Exception as error:
+            raise error
 
     def _close(self):
         """
@@ -47,19 +51,19 @@ class Db:
                     workers.append(worker)
             return workers
         except:
-            print('Введите корректный ID')
+            print('Некорректный ID')
 
     def __create_tables(self):
         """
         Создает таблицы в существующей бд
         """
         query = f"""
-                create table parents
+                create table if not exists parents
                 (
                     Id integer primary key,
                     ParentId integer
                 );
-                create table data
+                create table if not exists data
                 (
                     Id integer primary key references parents (Id),
                     Name character varying(100) not null,
@@ -69,9 +73,9 @@ class Db:
         try:
             self.__cursor.execute(query)
             self.__conn.commit()
-            print('Таблицы успешно созданы')
-        except:
-            print("Ошибка при создании таблиц")
+            print('Таблицы созданы')
+        except Exception as error:
+            raise error
 
     def __fill_tables(self, file):
         """
@@ -82,9 +86,9 @@ class Db:
             for query in queries:
                 self.__cursor.execute(query)
             self.__conn.commit()
-            print('Успешно заполнены все таблицы')
-        except:
-            print("Ошибка при заполнении таблиц")
+            print('Таблицы заполнены')
+        except Exception as error:
+            raise error
 
     def __parse_json(self, file):
         """
@@ -96,14 +100,14 @@ class Db:
         for row in data:
             id = row.get('id')
             parentid = row.get('ParentId')
+            parentid = parentid if parentid is not None else 'NULL'
             name = row.get('Name')
             type = row.get('Type')
-            if type == 1:
-                query = f'insert into parents (Id) values ({id})'
-            else:
-                query = f'insert into parents (Id, ParentId) values ({id}, {parentid})'
+            query = f'insert into parents (Id, ParentId) values ({id}, {parentid}) ' \
+                    f'on conflict (Id) do update set ParentId = {parentid}'
             yield query
-            query = f"insert into data (Id, Name, Type) values ({id}, '{name}', {type})"
+            query = f"insert into data (Id, Name, Type) values ({id}, '{name}', {type}) " \
+                    f"on conflict (Id) do update set Name = '{name}', Type = {type}"
             yield query
 
     def __create_function(self):
@@ -125,15 +129,17 @@ class Db:
                                 into parent, root;
                         end loop;
                         return root;
+                    else
+                        return -1;
                     end if;
                 end; $$;
                 """
         try:
             self.__cursor.execute(query)
             self.__conn.commit()
-            print('Функции созданы успешно')
-        except:
-            print("Ошибка при cоздании фунции")
+            print('Функция создана')
+        except Exception as error:
+            raise error
 
     def __get_root(self, id):
         """
@@ -145,16 +151,18 @@ class Db:
         try:
             self.__cursor.execute(query)
             return self.__cursor.fetchone()[0]
-        except:
-            print("Скорее всего, ID выбран неверный")
+        except Exception as error:
+            raise error
 
     def __get_workers(self, id):
         """
         Выполняет поиск в глубину для нахождения всех сотрудников офиса
         по ID офиса
+
         :param id: ID офиса
-        :return:
         """
+        if id == -1:
+            raise KeyError
         query = f"""
                 WITH RECURSIVE tree(id, parentid, path) AS (
                 SELECT id, parentid, array[id]::integer[]
@@ -172,5 +180,5 @@ class Db:
         try:
             self.__cursor.execute(query)
             return self.__cursor.fetchall()
-        except:
-            pass
+        except Exception as error:
+            raise error
