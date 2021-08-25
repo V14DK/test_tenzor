@@ -4,7 +4,7 @@ from enum import Enum
 
 
 class Db:
-    def __init__(self, user, password, dbname, path, host='localhost', port='5432'):
+    def __init__(self, user, password, dbname, host='localhost', port='5432'):
         self.__conn = psycopg2.connect(user=user,
                                        password=password,
                                        dbname=dbname,
@@ -16,14 +16,6 @@ class Db:
         else:
             self.connection = False
         print('Соединение открыто')
-        # если код впервые запускается, то нужно раскомментить часть ниже
-        # self.__start_settings(path)
-
-    class Tables(Enum):
-        parents = 0
-        offices = 1
-        departments = 2
-        workers = 3
 
     def _close(self):
         """
@@ -33,7 +25,7 @@ class Db:
         self.__conn.close()
         print('Соединение закрыто')
 
-    def __start_settings(self, file):
+    def start_settings(self, file):
         """
         Запускает создание и заполнение таблиц по json-файлу,
         создание функции в бд
@@ -62,29 +54,16 @@ class Db:
         """
         Создает таблицы в существующей бд
         """
-        parents = self.Tables(0).name
         query = f"""
-                create table {parents} 
+                create table parents
                 (
                     Id integer primary key,
                     ParentId integer
                 );
-                create table {self.Tables(1).name}
+                create table data
                 (
-                    Id integer primary key references {parents} (Id),
+                    Id integer primary key references parents (Id),
                     Name character varying(100) not null,
-                    Type integer not null
-                );
-                create table {self.Tables(2).name}
-                (
-                    Id integer primary key references {parents} (Id),
-                    Name character varying (50) not null,
-                    Type integer not null
-                );
-                create table {self.Tables(3).name}
-                (
-                    Id integer primary key references {parents} (Id),
-                    Name character varying (30) not null,
                     Type integer not null
                 );
                 """
@@ -121,12 +100,11 @@ class Db:
             name = row.get('Name')
             type = row.get('Type')
             if type == 1:
-                query = f'insert into {self.Tables.parents.name} (Id) values ({id})'
+                query = f'insert into parents (Id) values ({id})'
             else:
-                query = f'insert into {self.Tables.parents.name} (Id, ParentId) values ({id}, {parentid})'
+                query = f'insert into parents (Id, ParentId) values ({id}, {parentid})'
             yield query
-            query = f'insert into {self.Tables(type).name}'
-            query += f"(Id, Name, Type) values ({id}, '{name}', {type})"
+            query = f"insert into data (Id, Name, Type) values ({id}, '{name}', {type})"
             yield query
 
     def __create_function(self):
@@ -139,7 +117,7 @@ class Db:
                     language plpgsql as $$
                 declare
                     parent int := identificator;
-                    type int := (select workers.type from workers where workers.id = identificator);
+                    type int := (select data.type from data where data.id = identificator);
                     root int;
                 begin
                     if type = 3 then
@@ -186,8 +164,8 @@ class Db:
                 SELECT parents.*, path || array[parents.id]::integer[]
                 FROM parents INNER JOIN tree on tree.id = parents.parentid)
 
-                select workers.name from workers
-                where workers.id in
+                select data.name from data
+                where data.id in
                     (select parents.id from parents
                     where parents.id not in (select parentid from tree) 
                         and parents.parentid in (select id from tree))

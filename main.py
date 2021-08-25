@@ -3,7 +3,9 @@ from database import Db
 
 def main():
     try:
-        db = Db(user='postgres', password='12Qwaszx04', dbname='test', path='data.json')
+        db = Db(user='postgres', password='12Qwaszx04', dbname='test2')
+        # если код впервые запускается, то нужно раскомментить часть ниже
+        # db.start_settings('data.json')
         workers = db.get_workers()
         print(workers)
     except:
