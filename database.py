@@ -1,6 +1,5 @@
 import json
 import psycopg2
-from enum import Enum
 
 
 class Db:
