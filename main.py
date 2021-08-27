@@ -1,12 +1,17 @@
+from parse import Parser
 from database import Db
+from executor import Executor
+from tuner import Tuner
 
 
 def main():
-    db = Db(user='postgres', password='12Qwaszx04', dbname='test2', path='data.json')
-    workers = db.get_workers()
+    db = Db(*Parser._parse_config('config.json'))
+    tuner = Tuner(db)
+    tuner._start_tuning('data.json')
+    executor = Executor(db)
+    workers = executor.get_workers()
     print(workers)
     db._close()
-
 
 if __name__ == '__main__':
     main()
